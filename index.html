@@ -75,12 +75,13 @@ const msg=(t,c)=>{$('#msg').textContent=t;$('#msg').className=c||''};
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
 const b64=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result.split(',')[1]);f.readAsDataURL(b)});
-function shrink(file,max=1400){return new Promise((res,rej)=>{
+const toBlob=(img,max,q)=>new Promise(r=>{const k=Math.min(1,max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  c.toBlob(b=>r({blob:b,w:c.width,h:c.height}),'image/jpeg',q)});
+function shrink(file){return new Promise((res,rej)=>{
   const img=new Image(),u=URL.createObjectURL(file);
-  img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height));
-    const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);
-    c.toBlob(b=>res({blob:b,w:c.width,h:c.height}),'image/jpeg',.82)};
+  img.onload=async()=>{const m=await toBlob(img,1600,.82),t=await toBlob(img,800,.75);URL.revokeObjectURL(u);res({...m,thumb:t})};
   img.onerror=()=>rej(new Error('เปิดรูปไม่ได้'));img.src=u;})}
 
 async function addFiles(list){
@@ -92,7 +93,7 @@ async function addFiles(list){
         files.push({name:f.name,type:f.type,data:await b64(f),isPdf:true});
       }else if(f.type.startsWith('image/')){
         const s=await shrink(f);
-        files.push({name:f.name.replace(/\.[^.]+$/,'')+'.jpg',type:'image/jpeg',data:await b64(s.blob),w:s.w,h:s.h,url:URL.createObjectURL(s.blob)});
+        files.push({name:f.name.replace(/\.[^.]+$/,'')+'.jpg',type:'image/jpeg',data:await b64(s.blob),w:s.w,h:s.h,thumb:await b64(s.thumb.blob),tw:s.thumb.w,th:s.thumb.h,url:URL.createObjectURL(s.blob)});
       }
     }catch(e){msg(e.message,'err')}
   }
@@ -115,7 +116,7 @@ $('#send').onclick=async()=>{
   $('#send').disabled=true;msg('กำลังบันทึก อาจใช้เวลาสักครู่…');
   try{
     const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({key:$('#key').value.trim(),title,amount,date,files:files.map(({name,type,data,w,h})=>({name,type,data,w,h}))})});
+      body:JSON.stringify({key:$('#key').value.trim(),title,amount,date,files:files.map(({name,type,data,w,h,thumb,tw,th})=>({name,type,data,w,h,thumb,tw,th}))})});
     const j=await r.json();
     if(!j.ok)throw new Error(j.error||'บันทึกไม่สำเร็จ');
     msg('บันทึกแล้ว (แถวที่ '+j.row+')','ok');
